@@ -1,50 +1,99 @@
-name: Build and deploy Python app to Azure Web App
+name: Deploy to Azure Web App
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   workflow_dispatch:
 
+env:
+  AZURE_WEBAPP_NAME: 'roomiefy-messaging-bfeuhjfcdygshvad'
+  PYTHON_VERSION: '3.10'
+  WORKING_DIRECTORY: '.'
+
 jobs:
-  build:
-    runs-on: windows-latest
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
-    - name: Set up Python version
-      uses: actions/setup-python@v1
+    - name: Set up Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v4
       with:
-        python-version: '3.10'
+        python-version: ${{ env.PYTHON_VERSION }}
 
-    - name: Install dependencies
+    - name: Install system dependencies
       run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-pip python3-venv
+
+    - name: Create and start virtual environment
+      run: |
+        python -m venv venv
+        source venv/bin/activate
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        pip install gunicorn
 
-    - name: Upload artifact for deployment jobs
-      uses: actions/upload-artifact@v2
-      with:
-        name: python-app
-        path: ./
+    - name: Run tests (if any)
+      run: |
+        source venv/bin/activate
+        # Add your test commands here if you have any
+        # python -m pytest
 
-  deploy:
-    runs-on: windows-latest
-    needs: build
-    environment:
-      name: 'production'
-      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
-    steps:
-    - name: Download artifact from build job
-      uses: actions/download-artifact@v2
+    - name: Zip the application files
+      run: |
+        # Remove any existing zip file
+        rm -f deployment.zip
+        # Create a zip file with all files except those in .gitignore
+        git ls-files | zip deployment.zip -@
+        # Add the virtual environment
+        cd venv/lib/python${{ env.PYTHON_VERSION }}/site-packages
+        zip -r ../../../../deployment.zip .
+        cd ../../../..
+
+    - name: Login to Azure
+      uses: azure/login@v1
       with:
-        name: python-app
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
 
     - name: Deploy to Azure Web App
-      id: deploy-to-webapp
       uses: azure/webapps-deploy@v2
       with:
-        app-name: 'roomiefy-messaging-bfeuhjfcdygshvad'
-        slot-name: 'production'
+        app-name: ${{ env.AZURE_WEBAPP_NAME }}
+        package: deployment.zip
         publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_ROOMIEFY_MESSAGING_BFEUHJFCDYGSHVAD }}
-        package: .
+
+    - name: Configure App Service
+      uses: azure/appservice-settings@v1
+      with:
+        app-name: ${{ env.AZURE_WEBAPP_NAME }}
+        app-settings-json: |
+          [
+            {
+              "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
+              "value": "1",
+              "slotSetting": false
+            },
+            {
+              "name": "WEBSITE_NODE_DEFAULT_VERSION",
+              "value": "~16",
+              "slotSetting": false
+            },
+            {
+              "name": "PYTHON_ENABLE_WORKER_EXTENSIONS",
+              "value": "1",
+              "slotSetting": false
+            },
+            {
+              "name": "PYTHON_ENABLE_SITE_PACKAGES",
+              "value": "1",
+              "slotSetting": false
+            },
+            {
+              "name": "PYTHONPATH",
+              "value": "/home/site/wwwroot",
+              "slotSetting": false
+            }
+          ]

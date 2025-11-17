@@ -440,3 +440,10 @@ async def websocket_endpoint(websocket: WebSocket, room_id: int, db: Session = D
     except Exception as e:
         manager.disconnect(room_id, websocket)
         raise e
+
+# This is required for Gunicorn to find the FastAPI app
+app = app
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
