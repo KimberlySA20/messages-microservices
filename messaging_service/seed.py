@@ -2,7 +2,7 @@ from app.db import SessionLocal, init_db, Conversation, ConversationParticipant,
 from sqlalchemy import exists, and_
 from datetime import datetime, timedelta
 
-TEST_USER_ID = "102239748272978520578"
+TEST_USER_ID = "112618370063627002626"
 PARTNER_IDS = [
     ("roomie_demo_1", "Roomie Demo 1"),
     ("roomie_demo_2", "Roomie Demo 2"),
